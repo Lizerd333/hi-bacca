@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Solid Black Particle Heart</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      /* Use dynamic viewport height so mobile browser address bar
+         doesn't cause jumpy resizing/black bars */
+      height: 100dvh;
+      overflow: hidden;
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
+      /* Pure White Background */
+      background-color: rgb(255, 255, 255); 
+      font-family: sans-serif;
+      position: fixed;
+      top: 0;
+      left: 0;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh; /* mobile-safe viewport height */
+      touch-action: none;
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="heartCanvas"></canvas>
+
+  <script>
+    const canvas = document.getElementById('heartCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let width = canvas.width = window.innerWidth;
+    let height = canvas.height = window.innerHeight;
+
+    const particles = [];
+    const particleCount = 6500; 
+    
+    let startTime = Date.now();
+    const formationDuration = 6500; // 8.5 seconds to fully form
+
+    let mouse = { x: null, y: null, radius: 30 };
+
+    window.addEventListener('resize', () => {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    });
+
+    // Handle mobile browser UI (address bar) show/hide changing viewport height
+    window.addEventListener('orientationchange', () => {
+      setTimeout(() => {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+      }, 200);
+    });
+
+    const setTouch = (e) => {
+      const t = e.touches ? e.touches[0] : e;
+      mouse.x = t.clientX;
+      mouse.y = t.clientY;
+    };
+    const clearTouch = () => { mouse.x = null; mouse.y = null; };
+
+    window.addEventListener('mousemove', setTouch);
+    window.addEventListener('mouseleave', clearTouch);
+
+    // passive:false so we can prevent default page scroll/bounce on mobile
+    window.addEventListener('touchstart', (e) => { setTouch(e); }, { passive: false });
+    window.addEventListener('touchmove', (e) => { e.preventDefault(); setTouch(e); }, { passive: false });
+    window.addEventListener('touchend', clearTouch);
+
+    function getHeartPoint(t, scale) {
+      const x = 16 * Math.pow(Math.sin(t), 3);
+      const y = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
+      return { x: x * scale, y: -y * scale };
+    }
+
+    class Particle {
+      constructor() {
+        const angle = Math.random() * Math.PI * 2;
+        const heartSize = Math.min(width, height) * 0.020; 
+        
+        const fillFactor = Math.sqrt(Math.random()); 
+        const targetOffset = getHeartPoint(angle, heartSize);
+
+        this.targetX = width / 2 + targetOffset.x * fillFactor;
+        this.targetY = height / 2 + targetOffset.y * fillFactor;
+
+        // Spawn points: Outside viewport boundaries
+        const edge = Math.floor(Math.random() * 4);
+        if (edge === 0) { // Top
+          this.x = Math.random() * width;
+          this.y = -50 - Math.random() * 200;
+        } else if (edge === 1) { // Bottom
+          this.x = Math.random() * width;
+          this.y = height + 50 + Math.random() * 200;
+        } else if (edge === 2) { // Left
+          this.x = -50 - Math.random() * 200;
+          this.y = Math.random() * height;
+        } else { // Right
+          this.x = width + 50 + Math.random() * 200;
+          this.y = Math.random() * height;
+        }
+
+        this.vx = 0;
+        this.vy = 0;
+        
+        this.radius = Math.random() * 1.8 + 0.002;
+        // Pure Black / Charcoal particles with variable transparency
+        this.color = `rgba(245, 95, 225, ${Math.random() * 0.4 + 0.6})`;
+        
+        this.speedFactor = Math.random() * 0.0025 + 0.015;
+        this.friction = 0.88;
+      }
+
+      update(progress, time) {
+        const currentTargetX = this.x + (this.targetX - this.x) * progress;
+        const currentTargetY = this.y + (this.targetY - this.y) * progress;
+
+        let dx = this.targetX - this.x;
+        let dy = this.targetY - this.y;
+
+        if (progress >= 1) {
+          const pulse = 1 + Math.sin(time * 0.0035) * 0.03;
+          const cx = width / 2;
+          const cy = height / 2;
+          const px = cx + (this.targetX - cx) * pulse;
+          const py = cy + (this.targetY - cy) * pulse;
+          dx = px - this.x;
+          dy = py - this.y;
+        }
+
+        this.vx += dx * this.speedFactor;
+        this.vy += dy * this.speedFactor;
+
+        if (mouse.x !== null && mouse.y !== null) {
+          const mDx = this.x - mouse.x;
+          const mDy = this.y - mouse.y;
+          const distance = Math.sqrt(mDx * mDx + mDy * mDy);
+
+          if (distance < mouse.radius) {
+            const force = (mouse.radius - distance) / mouse.radius;
+            const angle = Math.atan2(mDy, mDx);
+            
+            this.vx += Math.cos(angle) * force * 14;
+            this.vy += Math.sin(angle) * force * 14;
+          }
+        }
+
+        this.vx *= this.friction;
+        this.vy *= this.friction;
+        this.x += this.vx;
+        this.y += this.vy;
+      }
+
+      draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+      }
+    }
+
+    for (let i = 0; i < particleCount; i++) {
+      particles.push(new Particle());
+    }
+
+    function animate() {
+      // Clear background with white trail opacity to eliminate artifacting
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.fillRect(0, 0, width, height);
+
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / formationDuration, 1);
+
+      particles.forEach(p => {
+        p.update(progress, elapsed);
+        p.draw();
+      });
+
+      requestAnimationFrame(animate);
+    }
+
+    animate();
+  </script>
+</body>
+</html>
